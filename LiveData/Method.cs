@@ -58,6 +58,11 @@ namespace Meteor
 			set;
 		}
 
+		public bool Optimized {
+			get;
+			set;
+		}
+
 		#endregion
 
 		protected bool complete;
@@ -69,11 +74,25 @@ namespace Meteor
 			complete = true;
 		}
 
+		protected bool Disconnected {
+			get {
+				return !Connection.Connected && !LiveData.Instance.TimedOut;
+			}
+		}
+
+		protected virtual void Send ()
+		{
+			if (Optimized) {
+				LiveData.Instance.SendOptimized (Message);
+			} else {
+				LiveData.Instance.Send (Message);
+			}
+		}
+
 		protected virtual IEnumerator Execute ()
 		{
 			// Send the method message over the wire.
-			while (!Connection.Connected
-				&& !LiveData.Instance.TimedOut) {
+			while (Disconnected) {
 				yield return null;
 			}
 
@@ -83,7 +102,7 @@ namespace Meteor
 			}
 
 			// Send the method message over the wire.
-			LiveData.Instance.Send (Message);
+			Send();
 
 			// Wait until we get a response.
 			while (!(complete && Updated)) {
@@ -184,8 +203,7 @@ namespace Meteor
 		protected override IEnumerator Execute ()
 		{
 			// Send the method message over the wire.
-			while (!Connection.Connected
-			       && !LiveData.Instance.TimedOut) {
+			while (Disconnected) {
 				yield return null;
 			}
 
@@ -194,7 +212,7 @@ namespace Meteor
 				yield break;
 			}
 
-			LiveData.Instance.Send (Message);
+			Send ();
 
 			// Wait until we get a response.
 			while (!(complete && Updated)) {

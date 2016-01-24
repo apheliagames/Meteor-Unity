@@ -257,6 +257,85 @@ namespace Meteor
 			Connector.Send (s);
 		}
 
+		public void SendOptimized (object obj)
+		{
+			#if UNITY_5_3
+			#if NETJSON && (UNITY_EDITOR || UNITY_STANDALONE)
+			NetJSON.NetJSON.IncludeFields = true;
+			var str = NetJSON.NetJSON.Serialize(obj);
+			#else
+			// Is this an object with params, like method?
+			var message = obj as MethodMessage;
+
+			if (message == null) {
+				Send (obj);
+				return;
+			}
+
+			var Params = message.Params;
+			var output = new string[Params.Length];
+			var length = 0;
+			for (var i = 0; i < Params.Length; i++) {
+				var param = Params [i];
+				var type = param.GetType ();
+				if (type.IsPrimitive
+				    || param is string
+					|| type.IsArray) {
+					output [i] = param.Serialize ();
+				} else {
+					// Try to serialize with JsonUtility. Usually it's a huge param.
+					output [i] = JsonUtility.ToJson (param);
+				}
+				length += output [i].Length;
+			}
+
+			// Message building
+			var preamble = string.Format ("{{\"msg\":\"{0}\", \"id\":\"{1}\", \"method\":\"{2}\", \"params\":[", message.msg, message.id, message.method);
+			var sb = new System.Text.StringBuilder (preamble, length + preamble.Length + 8);
+			var j = 0;
+			for (; j < output.Length-1; j++) {
+				sb.Append(output[j]);
+				sb.Append(",");
+			}
+
+			if (output.Length > j) {
+				sb.Append(output[j]);
+			}
+
+			// Ending
+			sb.Append (@"]}");
+
+			var str = sb.ToString ();
+			#endif
+			var bytes = System.Text.Encoding.UTF8.GetBytes (str);
+			#if IGNORE
+			// Replace the appearance of Params with params
+			byte[] compare = System.Text.Encoding.UTF8.GetBytes ("Params");
+			for (var i = 0; i < bytes.Length - compare.Length; i++) {
+				var j = 0;
+				for (; j < compare.Length; j++) {
+					if (bytes [i + j] != compare [j]) {
+						break;
+					}
+				}
+
+				if (j == compare.Length) {
+					bytes [i] = (byte)'p';
+					break;
+				}
+			}
+			#endif
+
+			if (Logging) {
+				Debug.Log (str);
+			}
+
+			Connector.Send (bytes);
+			#else
+			Send(obj);
+			#endif
+		}
+
 
 		#region IClient implementation
 
